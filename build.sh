@@ -115,21 +115,21 @@ if [ $mode = 'all' -a -e $build ] ; then
 fi
 
 for package in "${packages[@]}" ; do
-  echo "================================================================"
-  if [ $package = '_macro_' ] ; then
-      echo "Install all macros to $install/macros/."
-      ( 
-	  cd $src
-	  find . -type d -regex '.*/macros*' | while read DIR_SRC ; do
-	      echo "  $DIR_SRC"
-	      DIR_DEST=$install/macros/$(dirname $DIR_SRC)
-	      test $DIR_SRC = './macros' && DIR_DEST=$DIR_DEST/top
-	      mkdir -p $DIR_DEST
-	      cp -p $DIR_SRC/* $DIR_DEST
-	  done
-      )
-      continue
-  fi
+    echo "================================================================"
+    if [ $package = '_macro_' ] ; then
+        echo "Install all macros to $install/macros/."
+        ( 
+            cd $src
+            find . -type d -regex '.*/macros*' | while read DIR_SRC ; do
+                echo "  $DIR_SRC"
+                DIR_DEST=$install/macros/$(dirname $DIR_SRC)
+                test $DIR_SRC = './macros' && DIR_DEST=$DIR_DEST/top
+                mkdir -p $DIR_DEST
+                cp -rp $DIR_SRC/* $DIR_DEST   # -r added
+            done
+        )
+        continue
+    fi
 
   echo "Package: $package"
   if [ -f $build/$package/install_manifest.txt ]; then

@@ -26,6 +26,7 @@ void recoConsts::set_CharFlag(const std::string& name, const std::string& flag)
 
 std::string recoConsts::ExpandEnvironmentals(const std::string& input)
 {
+  if (input.length() == 00) return ""; // Treat specially since exp_result.we_wordc = 0 when input is "".
   wordexp_t exp_result;
   if(wordexp(input.c_str(), &exp_result, 0) != 0)
   {
@@ -185,6 +186,25 @@ void recoConsts::init(int runNo, bool verbose)
     set_IntFlag("MaxHitsDC2" , 170);
     set_IntFlag("MaxHitsDC3p", 140);
     set_IntFlag("MaxHitsDC3m", 140);
+  } else if (runNo < 6180) {
+    if (verbose) std::cout << "recoConsts::init(): run " << runNo << " | E1039 commissioning data in 2024." << std::endl;
+    set_DoubleFlag("FMAGSTR", -1.044);
+    set_DoubleFlag("KMAGSTR", -1.025);
+    set_CharFlag  ("HIT_MASK_MODE", "X");
+    set_CharFlag  ("AlignmentMille", "$E1039_RESOURCE/alignment/run0/align_mille_v10_a.txt");
+    set_CharFlag  ("AlignmentHodo" , "");
+    set_CharFlag  ("AlignmentProp" , "");
+    set_CharFlag  ("Calibration"   , "");
+    set_IntFlag   ("MaxHitsDC0" , 350);
+    set_IntFlag   ("MaxHitsDC1" , 350);
+    set_IntFlag   ("MaxHitsDC2" , 170);
+    set_IntFlag   ("MaxHitsDC3p", 140);
+    set_IntFlag   ("MaxHitsDC3m", 140);
+    set_DoubleFlag("RejectWinDC0" , 0.3);
+    set_DoubleFlag("RejectWinDC1" , 0.5);
+    set_DoubleFlag("RejectWinDC2" , 0.35);
+    set_DoubleFlag("RejectWinDC3p", 0.24);
+    set_DoubleFlag("RejectWinDC3m", 0.24);
   }
   return;
 }

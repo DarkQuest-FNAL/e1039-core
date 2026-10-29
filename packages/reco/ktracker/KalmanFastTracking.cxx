@@ -73,6 +73,7 @@ namespace
   static bool MC_MODE;
   static bool COSMIC_MODE;
   static bool COARSE_MODE;
+  static std::string HIT_MASK_MODE;
 
   // initialize global variables
   void initGlobalVariables()
@@ -116,6 +117,7 @@ namespace
       MUID_EMP_P1 = rc->get_DoubleFlag("MUID_EMP_P1");
       MUID_EMP_P2 = rc->get_DoubleFlag("MUID_EMP_P2");
       MUID_MINHITS = rc->get_IntFlag("MUID_MINHITS");
+      HIT_MASK_MODE = rc->get_CharFlag("HIT_MASK_MODE");
     }
   }
 }
@@ -467,21 +469,39 @@ int KalmanFastTracking::setRawEventPrep(SRawEvent *event_input)
   }
 
   // Initialize hodo and masking IDs
-  for (int i = 0; i < 4; i++)
+  for(int i = 0; i < 4; i++)
   {
-    // std::cout << "For station " << i << std::endl;
-    hitIDs_mask[i].clear();
-    if (MC_MODE || COSMIC_MODE || rawEvent->isFPGATriggered())
-    {
-      hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskX[i]);
-    }
-    else
-    {
-      hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskY[i]);
-    }
+      //std::cout << "For station " << i << std::endl;
+      hitIDs_mask[i].clear();
+      if(HIT_MASK_MODE == "XY")
+      {
+          hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_mask[i]);
+          if (verbosity >= 4) LogInfo("Mask XY");
+      }          
+      else if(HIT_MASK_MODE == "X" ||
+              HIT_MASK_MODE == "AUTO" && (MC_MODE || COSMIC_MODE || rawEvent->isFPGATriggered()))
+      {
+          hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskX[i]);
+          if (verbosity >= 4) LogInfo("Mask X");
+      }
+      else if(HIT_MASK_MODE == "NONE")
+      {
+          if (verbosity >= 4) LogInfo("Mask NONE");
+      }
+      else
+      {
+          hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskY[i]);
+          if (verbosity >= 4) LogInfo("Mask Y");
+      }
+      if (verbosity >= 4) {
+        std::ostringstream oss;
+        oss << "  ";
+        for (auto it = hitIDs_mask[i].begin(); it != hitIDs_mask[i].end(); it++) oss << " " << *it;
+        LogInfo(oss.str());
+      }
 
-    // for(std::list<int>::iterator iter = hitIDs_mask[i].begin(); iter != hitIDs_mask[i].end(); ++iter) std::cout << *iter << " " << hitAll[*iter].detectorID << " === ";
-    // std::cout << std::endl;
+        //for(std::list<int>::iterator iter = hitIDs_mask[i].begin(); iter != hitIDs_mask[i].end(); ++iter) std::cout << *iter << " " << hitAll[*iter].detectorID << " === ";
+        //std::cout << std::endl;
   }
 
   // Initialize prop. tube IDs
@@ -1478,6 +1498,7 @@ bool KalmanFastTracking::hodoMask(Tracklet &tracklet)
 {
   // LogInfo(tracklet.stationID);
   int nHodoHits = 0;
+  if (HIT_MASK_MODE == "NONE") return true;
   for (std::vector<int>::iterator stationID = stationIDs_mask[tracklet.stationID - 1].begin(); stationID != stationIDs_mask[tracklet.stationID - 1].end(); ++stationID)
   {
     bool masked = false;
