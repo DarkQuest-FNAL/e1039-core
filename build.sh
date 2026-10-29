@@ -64,8 +64,6 @@ else # 'all' or 'resume'
     framework/ffaobjects
     framework/fun4all
     interface_main
-    packages/UtilAna
-    online/decoder_maindaq
     packages/Half
     packages/vararray
     database/pdbcal/base
@@ -79,7 +77,6 @@ else # 'all' or 'resume'
     simulation/g4main
     simulation/g4detectors
     simulation/g4eval
-    generators/E906LegacyGen
     packages/reco/interface
     packages/reco/SQGenFit
     packages/reco/kfitter
@@ -88,13 +85,16 @@ else # 'all' or 'resume'
     packages/evt_filter
     packages/dptrigger
     #packages/db2g4
+    packages/UtilAna
+    online/decoder_maindaq
+    generators/E906LegacyGen
+    generators/SingleMuonGen
+    generators/JpsiGen
     packages/kTThreads
     packages/embedding
+    packages/rs_Reader
+    packages/RUS
     simulation/g4dst
-    online/onlmonserver
-    packages/Display/display
-    packages/Display/modules
-    packages/Display/interface
     _macro_
 	)
   if [ $mode = 'resume' ] ; then

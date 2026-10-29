@@ -15,6 +15,8 @@ using namespace std;
 
 CalibDriftDist::CalibDriftDist(const std::string& name)
   : SubsysReco(name)
+  , m_skip_calib(false)
+  , m_delete_out_time_hit(false)
   , m_manual_map_selection(false)
   , m_fn_xt("")
   , m_vec_hit(0)
@@ -35,7 +37,7 @@ CalibDriftDist::~CalibDriftDist()
 
 int CalibDriftDist::Init(PHCompositeNode* topNode)
 {
-  if (m_manual_map_selection) {
+  if (! m_skip_calib && m_manual_map_selection) {
     m_cal_xt = new CalibParamXT();
     m_cal_xt->SetMapID(m_fn_xt);
     m_cal_xt->ReadFromLocalFile(m_fn_xt);
@@ -50,6 +52,9 @@ int CalibDriftDist::InitRun(PHCompositeNode* topNode)
   m_vec_hit = findNode::getClass<SQHitVector>(topNode, "SQHitVector");
   if (!m_vec_hit) return Fun4AllReturnCodes::ABORTEVENT;
 
+  if (m_skip_calib) {
+    if (Verbosity() > 0) cout << Name() << ": Skip the calibration." << endl;
+  } else {
   recoConsts* rc = recoConsts::instance();
 
   if (! m_manual_map_selection) {
@@ -70,7 +75,7 @@ int CalibDriftDist::InitRun(PHCompositeNode* topNode)
   }
 
   if (m_reso_d0 > 0) {
-    if (Verbosity() > 0) cout << "CalibDriftDist: Set the plane resolution.\n";
+      if (Verbosity() > 0) cout << Name() << ": Set the plane resolution.\n";
     GeomSvc* geom = GeomSvc::instance();
     for (int ii = 1; ii <= nChamberPlanes; ii++) {
       Plane* plane = geom->getPlanePtr(ii);
@@ -87,34 +92,31 @@ int CalibDriftDist::InitRun(PHCompositeNode* topNode)
       }
     }
   }
+  }
 
   return Fun4AllReturnCodes::EVENT_OK;
 }
 
 int CalibDriftDist::process_event(PHCompositeNode* topNode)
 {
+  map<int, int> list_n_hit_in;
+  map<int, int> list_n_hit_out;
+    
   GeomSvc* geom = GeomSvc::instance();
-  for (SQHitVector::Iter it = m_vec_hit->begin(); it != m_vec_hit->end(); it++) {
+  for (SQHitVector::Iter it = m_vec_hit->begin(); it != m_vec_hit->end(); ) {
     SQHit* hit = *it;
     int det = hit->get_detector_id();
-    if (!geom->isChamber(det) && !geom->isPropTube(det)) continue;
+    if (!geom->isChamber(det) && !geom->isPropTube(det)) {
+      it++;
+      continue;
+    }
 
-    /*
-    int ele = hit->get_element_id();
-    TGraphErrors* gr_t2x;
-    TGraphErrors* gr_t2dx;
-    double center, width;
-    std::cout<<"in CalibDriftDist process_event.  det = "<<det<<", ele = "<<ele<<", isInTime = "<<hit->is_in_time()<<", m_cal_xt ->Find(det, gr_t2x, gr_t2dx) = "<<m_cal_xt ->Find(det, gr_t2x, gr_t2dx)<<", m_cal_int->Find(det, ele, center, width) = "<<m_cal_int->Find(det, ele, center, width)<<std::endl; //WPM
-    std::cout<<"still in CalibDriftDist process_event.  index = "<<hit->get_hit_id()<<", detID = "<<hit->get_detector_id()<<", elementID = "<<hit->get_element_id()<<", tdcTime = "<<hit->get_tdc_time()<<", driftDistance = "<<fabs(hit->get_drift_distance())<<", pos = "<<hit->get_pos()<<", is_in_time = "<<hit->is_in_time()<<", get_tdc_time = "<<hit->get_tdc_time()<<std::endl; //WPM
-    if (! m_cal_xt ->Find(det, gr_t2x, gr_t2dx) || 
-        ! m_cal_int->Find(det, ele, center, width) ) {
-      cerr << "  WARNING:  Cannot find the in-time parameter for det=" << det << " ele=" << ele << " in CalibDriftDist.\n";
-    */  
+    if (! m_skip_calib) {
     CalibParamXT::Set* xt = m_cal_xt->GetParam(det);
     if (! det) {
       cerr << "  WARNING:  Cannot find the in-time parameter for det=" << det << " in CalibDriftDist.\n";
-      continue;
-      //return Fun4AllReturnCodes::ABORTEVENT;
+        it++;
+        continue; // return Fun4AllReturnCodes::ABORTEVENT;
     }
     float   tdc_time = hit->get_tdc_time();
     float drift_dist = xt->t2x.Eval(tdc_time);
@@ -126,6 +128,25 @@ int CalibDriftDist::process_event(PHCompositeNode* topNode)
     int ele = hit->get_element_id();
     hit->set_pos(geom->getMeasurement(det, ele));
     //std::cout<<"still still in CalibDriftDist process_event.  index = "<<hit->get_hit_id()<<", detID = "<<hit->get_detector_id()<<", elementID = "<<hit->get_element_id()<<", tdcTime = "<<hit->get_tdc_time()<<", driftDistance = "<<fabs(hit->get_drift_distance())<<", pos = "<<hit->get_pos()<<", is_in_time = "<<hit->is_in_time()<<", get_tdc_time = "<<hit->get_tdc_time()<<", t1 = "<<t1<<", t0 = "<<t0<<std::endl; //WPM
+  }
+    if (m_delete_out_time_hit) {
+      if (! hit->is_in_time()) {
+        it = m_vec_hit->erase(it);
+      } else {
+        it++;
+        if (Verbosity() > 1) list_n_hit_out[det]++;
+      }
+      if (Verbosity() > 1) list_n_hit_in[det]++;
+    } else {
+      it++;
+    }
+  }
+  if (Verbosity() > 1 && m_delete_out_time_hit) {
+    cout << Name() << ": ";
+    for (auto it = list_n_hit_in.begin(); it != list_n_hit_in.end(); it++) {
+      cout << " " << it->first << ":" << it->second << "->" << list_n_hit_out[it->first];
+    }
+    cout << endl;
   }
   return Fun4AllReturnCodes::EVENT_OK;
 }

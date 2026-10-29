@@ -30,9 +30,14 @@ int CalibHitElementPos::Init(PHCompositeNode* topNode)
 
 int CalibHitElementPos::InitRun(PHCompositeNode* topNode)
 {
+  if (m_cal_hit) {
   m_vec_hit   = findNode::getClass<SQHitVector>(topNode, "SQHitVector");
+    if (!m_vec_hit) return Fun4AllReturnCodes::ABORTEVENT;
+  }
+  if (m_cal_tr_hit) {
   m_vec_trhit = findNode::getClass<SQHitVector>(topNode, "SQTriggerHitVector");
-  if (!m_vec_hit || !m_vec_trhit) return Fun4AllReturnCodes::ABORTEVENT;
+    if (!m_vec_trhit) return Fun4AllReturnCodes::ABORTEVENT;
+  }
   return Fun4AllReturnCodes::EVENT_OK;
 }
 
@@ -44,7 +49,7 @@ int CalibHitElementPos::process_event(PHCompositeNode* topNode)
     for (SQHitVector::Iter it = m_vec_hit->begin(); it != m_vec_hit->end(); it++) {
       SQHit* hit = *it;
       if (Verbosity() > 10) cout << "  hit " << hit->get_detector_id() << " " << hit->get_element_id() << endl;
-      if (hit->get_detector_id() <= 0 || hit->get_detector_id() > 1000) continue; // temporary solution to avoid a seg fault on strange hits.
+      if (hit->get_detector_id() <= 0 || hit->get_detector_id() >= 1000) continue; // temporary solution to avoid a seg fault on strange hits.
       hit->set_pos(geom->getMeasurement(hit->get_detector_id(), hit->get_element_id()));
     }
   }
@@ -52,7 +57,7 @@ int CalibHitElementPos::process_event(PHCompositeNode* topNode)
     for (SQHitVector::Iter it = m_vec_trhit->begin(); it != m_vec_trhit->end(); it++) {
       SQHit* hit = *it;
       if (Verbosity() > 10) cout << "  trig hit " << hit->get_detector_id() << " " << hit->get_element_id() << endl;
-      if (hit->get_detector_id() <= 0 || hit->get_detector_id() > 1000) continue; // temporary solution to avoid a seg fault on strange hits.
+      if (hit->get_detector_id() <= 0 || hit->get_detector_id() >= 1000) continue; // temporary solution to avoid a seg fault on strange hits.
       hit->set_pos(geom->getMeasurement(hit->get_detector_id(), hit->get_element_id()));
     }
   }

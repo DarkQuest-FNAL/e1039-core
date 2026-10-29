@@ -11,20 +11,13 @@ class SQEvent;
 class SQSpillMap;
 class SQHitVector;
 
-class Fun4AllSRawEventOutputManager: public Fun4AllOutputManager
+/// Fun4AllOutputManager to generate SRawEvent output file.
+class Fun4AllSRawEventOutputManager : public Fun4AllOutputManager
 {
-  typedef enum {
-    UNDEF  = 0,
-    OPEN   = 1,
-    UPDATE = 2,
-    CLOSE  = 3
-  } Status_t;
-  std::string m_dir_base;
+  std::string m_file_name;
   std::string m_tree_name;
   std::string m_branch_name;
-  std::string m_file_name;
   int m_run_id;
-  int m_spill_id;
   TFile* m_file;
   TTree* m_tree;
   SRawEvent* m_sraw;
@@ -35,9 +28,10 @@ class Fun4AllSRawEventOutputManager: public Fun4AllOutputManager
   SQHitVector* m_trig_hit_vec;
 
  public:
-  Fun4AllSRawEventOutputManager(const std::string &dir_base, const std::string &myname = "SRAWEVENTOUT");
+  Fun4AllSRawEventOutputManager(const std::string &myname="SRAWEVENTOUT");
   virtual ~Fun4AllSRawEventOutputManager();
 
+  void SetFileName  (const std::string name) { m_file_name   = name; }
   void SetTreeName  (const std::string name) { m_tree_name   = name; }
   void SetBranchName(const std::string name) { m_branch_name = name; }
 
@@ -46,7 +40,6 @@ class Fun4AllSRawEventOutputManager: public Fun4AllOutputManager
  protected:
   void CloseFile();
   void OpenFile();
-  void UpdateDBStatus(const int status);
 };
 
 #endif /* __FUN4ALLSRAWEVENTOUTPUTMANAGER_H__ */

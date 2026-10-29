@@ -299,7 +299,7 @@ void GeomSvc::init()
     map_detectorID.insert(nameToID("H4T", ++idx));
     // Please make sure of "idx = nChamberPlanes + nHodoPlanes" here
 
-    map_detectorID.insert(nameToID("P1Y1", ++idx));
+    map_detectorID.insert(nameToID("P1Y1", ++idx)); // 47
     map_detectorID.insert(nameToID("P1Y2", ++idx));
     map_detectorID.insert(nameToID("P1X1", ++idx));
     map_detectorID.insert(nameToID("P1X2", ++idx));
@@ -309,7 +309,7 @@ void GeomSvc::init()
     map_detectorID.insert(nameToID("P2Y2", ++idx));
     // Please make sure of "idx = nChamberPlanes + nHodoPlanes + nPropPlanes" here
 
-    map_detectorID.insert(nameToID("DP1TL", ++idx));
+    map_detectorID.insert(nameToID("DP1TL", ++idx)); // 55
     map_detectorID.insert(nameToID("DP1TR", ++idx));
     map_detectorID.insert(nameToID("DP1BL", ++idx));
     map_detectorID.insert(nameToID("DP1BR", ++idx));
@@ -319,7 +319,7 @@ void GeomSvc::init()
     map_detectorID.insert(nameToID("DP2BR", ++idx));
     // Please make sure of "idx = nChamberPlanes + nHodoPlanes + nPropPlanes + nDarkPhotonPlanes" here
 
-    map_detectorID.insert(nameToID("BeforeInhNIM", ++idx));
+    map_detectorID.insert(nameToID("BeforeInhNIM"   , ++idx)); // 63
     map_detectorID.insert(nameToID("BeforeInhMatrix", ++idx));
     map_detectorID.insert(nameToID("AfterInhNIM", ++idx));
     map_detectorID.insert(nameToID("AfterInhMatrix", ++idx));
@@ -338,7 +338,7 @@ void GeomSvc::init()
     map_detectorID.insert(nameToID("L1NIMyb", ++idx));
     // No constant for this name group is defined in GlobalConsts.h.
 
-    map_detectorID.insert(nameToID("H4Y1Ll", ++idx));
+    map_detectorID.insert(nameToID("H4Y1Ll", ++idx)); // 80
     map_detectorID.insert(nameToID("H4Y1Lr", ++idx));
     map_detectorID.insert(nameToID("H4Y1Rl", ++idx));
     map_detectorID.insert(nameToID("H4Y1Rr", ++idx));
@@ -561,9 +561,13 @@ void GeomSvc::initWireLUT()
     typedef std::unordered_map<int, TVectorD>::value_type epType;
     for (int i = 1; i <= nChamberPlanes; ++i)
     {
+      map_wirePosition[i].clear();
+      map_endPoint1   [i].clear();
+      map_endPoint2   [i].clear();
+      planes          [i].elementPos.clear();
         for (int j = 1; j <= planes[i].nElements; ++j)
         {
-            double pos = (j - (planes[i].nElements + 1.) / 2.) * planes[i].spacing + planes[i].xoffset + planes[i].x0 * planes[i].costheta + planes[i].y0 * planes[i].sintheta + planes[i].deltaW;
+          double pos = (j - (planes[i].nElements+1.)/2.)*planes[i].spacing + planes[i].xoffset + planes[i].xc*planes[i].costheta + planes[i].yc*planes[i].sintheta + planes[i].deltaW;
             map_wirePosition[i].insert(posType(j, pos));
 
             map_endPoint1[i].insert(epType(j, planes[i].getEndPoint(j, -1)));
@@ -577,22 +581,26 @@ void GeomSvc::initWireLUT()
     // 2. for hodoscopes and prop. tubes
     for (int i = nChamberPlanes + 1; i <= nChamberPlanes + nHodoPlanes + nPropPlanes + nDarkPhotonPlanes; ++i)
     {
+      map_wirePosition[i].clear();
+      map_endPoint1   [i].clear();
+      map_endPoint2   [i].clear();
+      planes          [i].elementPos.clear();
         for (int j = 1; j <= planes[i].nElements; ++j)
         {
             double pos;
             if (i <= nChamberPlanes + nHodoPlanes)
             {
-                pos = planes[i].x0 * planes[i].costheta + planes[i].y0 * planes[i].sintheta + planes[i].xoffset + (j - (planes[i].nElements + 1) / 2.) * planes[i].spacing + planes[i].deltaW;
+              pos = planes[i].xc*planes[i].costheta + planes[i].yc*planes[i].sintheta + planes[i].xoffset + (j - (planes[i].nElements+1)/2.)*planes[i].spacing + planes[i].deltaW;
             }
             else if (i <= nChamberPlanes + nHodoPlanes + nPropPlanes)
             {
                 int moduleID = 8 - int((j - 1) / 8); // Need to re-define moduleID for run2, note it's reversed compared to elementID
-                pos = planes[i].x0 * planes[i].costheta + planes[i].y0 * planes[i].sintheta + planes[i].xoffset + (j - (planes[i].nElements + 1) / 2.) * planes[i].spacing + planes[i].deltaW_module[moduleID];
+              pos = planes[i].xc*planes[i].costheta + planes[i].yc*planes[i].sintheta + planes[i].xoffset + (j - (planes[i].nElements+1)/2.)*planes[i].spacing + planes[i].deltaW_module[moduleID];
             }
             else
             {
                 int elementID = ((i - 55) & 2) > 0 ? planes[i].nElements + 1 - j : j;
-                pos = planes[i].x0 * planes[i].costheta + planes[i].y0 * planes[i].sintheta + planes[i].xoffset + (elementID - (planes[i].nElements + 1) / 2.) * planes[i].spacing + planes[i].deltaW;
+              pos = planes[i].xc*planes[i].costheta + planes[i].yc*planes[i].sintheta + planes[i].xoffset + (elementID - (planes[i].nElements+1)/2.)*planes[i].spacing + planes[i].deltaW;
             }
             map_wirePosition[i].insert(posType(j, pos));
             map_endPoint1[i].insert(epType(j, planes[i].getEndPoint(j, -1)));
@@ -703,7 +711,10 @@ int GeomSvc::getExpElementID(int detectorID, double pos_exp)
     if (pos_exp < pos_min)
         return 0;
 
-    int index = std::lower_bound(planes[detectorID].elementPos.begin(), planes[detectorID].elementPos.end(), pos_exp) - planes[detectorID].elementPos.begin();
+    auto iter = std::lower_bound(planes[detectorID].elementPos.begin(), planes[detectorID].elementPos.end(), pos_exp);
+    int index;
+    if (iter != planes[detectorID].elementPos.end()) index = iter - planes[detectorID].elementPos.begin();
+    else index = planes[detectorID].nElements - 1; // pos_exp > pos_last_element.  pos_exp is inside the last element since "pos_exp <= pos_max" was assured above
     int elementID = index + 1 + (planes[detectorID].elementPos[index] - pos_exp > 0.5 * planes[detectorID].spacing ? -1 : 0);
 
     if (detectorID > nChamberPlanes + nHodoPlanes + nPropPlanes)
@@ -826,6 +837,16 @@ bool GeomSvc::isDPHodo(const int detectorID) const
 bool GeomSvc::isDPHodo(const std::string detectorName) const
 {
     return detectorName.substr(0, 2) == "DP";
+}
+
+bool GeomSvc::isInh(const int detectorID) const
+{
+  return isInh(getDetectorName(detectorID));
+}
+
+bool GeomSvc::isInh(const std::string detectorName) const
+{
+  return detectorName.substr(0, 6) == "Before" || detectorName.substr(0, 5) == "After";
 }
 
 int GeomSvc::getHodoStation(const int detectorID) const
@@ -983,6 +1004,7 @@ void GeomSvc::loadAlignment(const std::string &alignmentFile_chamber, const std:
     }
     _align_chamber.close();
 
+    if (! alignmentFile_hodo.empty()) {
     // load alignment numbers for hodos
     fstream _align_hodo;
     _align_hodo.open(alignmentFile_hodo.c_str(), ios::in);
@@ -1008,7 +1030,9 @@ void GeomSvc::loadAlignment(const std::string &alignmentFile_chamber, const std:
         cout << "GeomSvc: failed to load hodoscope alignment parameters from " << alignmentFile_hodo << endl;
     }
     _align_hodo.close();
+    }
 
+    if (! alignmentFile_prop.empty()) {    
     // load alignment numbers for prop. tubes
     fstream _align_prop;
     _align_prop.open(alignmentFile_prop.c_str(), ios::in);
@@ -1047,11 +1071,13 @@ void GeomSvc::loadAlignment(const std::string &alignmentFile_chamber, const std:
     {
         cout << "GeomSvc: failed to load prop. tube alignment parameters from " << alignmentFile_prop << endl;
     }
+    }
 }
 
 void GeomSvc::loadMilleAlignment(const std::string &alignmentFile_mille)
 {
     using namespace std;
+    if (alignmentFile_mille.empty()) return;
 
     // load alignment numbers for chambers
     fstream _align_mille;
@@ -1093,6 +1119,7 @@ void GeomSvc::loadMilleAlignment(const std::string &alignmentFile_mille)
 void GeomSvc::loadCalibration(const std::string &calibrationFile)
 {
     using namespace std;
+    if (calibrationFile.empty()) return;
 
     fstream _cali_file;
     _cali_file.open(calibrationFile.c_str(), ios::in);
@@ -1141,8 +1168,7 @@ void GeomSvc::printWirePosition()
 {
     for (std::map<std::string, int>::iterator iter = map_detectorID.begin(); iter != map_detectorID.end(); ++iter)
     {
-        if (iter->second > nChamberPlanes + nHodoPlanes + nPropPlanes)
-            continue;
+    if(iter->second>nChamberPlanes+nHodoPlanes+nPropPlanes+nDarkPhotonPlanes) continue;
         int detectorID = (*iter).second;
         std::cout << " ====================== " << (*iter).first << " ==================== " << std::endl;
         for (int i = 1; i <= planes[detectorID].nElements; ++i)
@@ -1163,8 +1189,7 @@ void GeomSvc::printAlignPar()
     std::cout << "detectorID         DetectorName            offset_pos             offset_z             offset_phi" << std::endl;
     for (std::map<std::string, int>::iterator iter = map_detectorID.begin(); iter != map_detectorID.end(); ++iter)
     {
-        if (iter->second > nChamberPlanes + nHodoPlanes + nPropPlanes)
-            continue;
+    if(iter->second>nChamberPlanes+nHodoPlanes+nPropPlanes+nDarkPhotonPlanes) continue;
         std::cout << iter->second << "     " << iter->first << "    " << planes[(*iter).second].deltaW << "     " << planes[(*iter).second].deltaZ << "      " << planes[(*iter).second].rotZ << std::endl;
     }
 }
@@ -1174,8 +1199,24 @@ void GeomSvc::printTable()
     std::cout << "detectorID detectorName planeType    Spacing     Xoffset     overlap     width       height       nElement       angleFromVertical     z0     x0     y0     deltaW" << std::endl;
     for (std::map<std::string, int>::iterator iter = map_detectorID.begin(); iter != map_detectorID.end(); ++iter)
     {
-        if (iter->second > nChamberPlanes + nHodoPlanes + nPropPlanes)
-            continue;
+    if(iter->second>nChamberPlanes+nHodoPlanes+nPropPlanes+nDarkPhotonPlanes) continue;
         std::cout << planes[iter->second] << std::endl;
     }
+}
+
+void GeomSvc::printElementPos()
+{
+  std::cout << "GeomSvc::printElementPos():\n";
+  for(auto it = map_detectorID.begin(); it != map_detectorID.end(); ++it) {
+    std::string det_name = it->first;
+    int         det_id   = it->second;
+    if(det_id > nChamberPlanes+nHodoPlanes+nPropPlanes+nDarkPhotonPlanes) continue;
+    std::cout << "Detector " << det_id << ":" << det_name;
+    int n_ele = planes[det_id].nElements;
+    for (int i_ele = 0; i_ele < n_ele; i_ele++) {
+      if (i_ele % 10 == 0) std::cout << "\n  " << std::setw(3) << (i_ele+1) << ": ";
+      std::cout << " " << planes[det_id].elementPos.at(i_ele);
+    }
+    std::cout << "\n";
+  }
 }

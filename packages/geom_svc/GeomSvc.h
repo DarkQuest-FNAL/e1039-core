@@ -151,6 +151,14 @@ public:
  * rc->set_CharFlag("GeomPlane", "2022111601");
  * GeomSvc* geom = GeomSvc::instance();
  * @endcode
+ *
+ * You might change some plane parameters, which might require `initWireLUT()`;
+ * @code
+ * GeomSvc* geom = GeomSvc::instance();
+ * geom->getPlanePtr(55)->cellWidth = 1.015;
+ * geom->getPlanePtr(55)->spacing   = 1.015;
+ * geom->initWireLUT();
+ * @endcode
  */
 class GeomSvc
 {
@@ -260,6 +268,8 @@ public:
     bool isPropTube(const std::string detectorName) const; ///< Return "true" for prop tube planes.
     bool isDPHodo(const int detectorID) const; ///< Return "true" for DP hodo planes.
     bool isDPHodo(const std::string detectorName) const; ///< Return "true" for DP hodo planes.
+    bool isInh(const int detectorID) const; ///< Return "true" for BeforeInh and AfterInh signals.
+    bool isInh(const std::string detectorName) const;
 
     int getHodoStation(const int detectorID) const; ///< Return a station number (1-4) for hodo planes or "0" for others.
     int getHodoStation(const std::string detectorName) const; ///< Return a station number (1-4) for hodo planes or "0" for others.
@@ -338,6 +348,7 @@ public:
     void printAlignPar();
     void printTable();
     void printWirePosition();
+    void printElementPos();
 
     static void UseDbSvc(const bool val) { use_dbsvc = val; }
     static bool UseDbSvc()        { return use_dbsvc; }

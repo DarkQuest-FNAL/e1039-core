@@ -13,6 +13,7 @@ Created: 05-28-2013
 #include <fun4all/Fun4AllBase.h>
 
 #include <iostream>
+#include <sstream>
 #include <algorithm>
 #include <cmath>
 
@@ -69,10 +70,14 @@ namespace
   // static flag of kmag on/off
   static bool KMAG_ON;
 
+    //static flag to turn MU ID on/off
+    static bool REQUIRE_MUID;
+
   // running mode
   static bool MC_MODE;
   static bool COSMIC_MODE;
   static bool COARSE_MODE;
+    static std::string HIT_MASK_MODE;
 
   // initialize global variables
   void initGlobalVariables()
@@ -86,6 +91,8 @@ namespace
       KMAG_ON = rc->get_BoolFlag("KMAG_ON");
       COSMIC_MODE = rc->get_BoolFlag("COSMIC_MODE");
       COARSE_MODE = rc->get_BoolFlag("COARSE_MODE");
+            REQUIRE_MUID = rc->get_BoolFlag("REQUIRE_MUID");
+            HIT_MASK_MODE = rc->get_CharFlag("HIT_MASK_MODE");
 
       MaxHitsDC0 = rc->get_IntFlag("MaxHitsDC0");
       MaxHitsDC1 = rc->get_IntFlag("MaxHitsDC1");
@@ -120,7 +127,10 @@ namespace
   }
 }
 
-KalmanFastTracking::KalmanFastTracking(const PHField *field, const TGeoManager *geom, bool flag) : verbosity(0), enable_KF(flag), outputListIdx(4)
+KalmanFastTracking::KalmanFastTracking(const PHField* field, const TGeoManager* geom, bool flag, const int verb)
+  : verbosity(verb)
+  , enable_KF(flag)
+  , outputListIdx(4)
 {
   using namespace std;
   initGlobalVariables();
@@ -148,18 +158,7 @@ KalmanFastTracking::KalmanFastTracking(const PHField *field, const TGeoManager *
   }
 
   // Initialize minuit minimizer
-  minimizer[0] = ROOT::Math::Factory::CreateMinimizer("Minuit2", "Simplex");
-  minimizer[1] = ROOT::Math::Factory::CreateMinimizer("Minuit2", "Combined");
-  fcn = ROOT::Math::Functor(&tracklet_curr, &Tracklet::Eval, KMAG_ON ? 5 : 4);
-
-  for (int i = 0; i < 2; ++i)
-  {
-    minimizer[i]->SetMaxFunctionCalls(1000000);
-    minimizer[i]->SetMaxIterations(100);
-    minimizer[i]->SetTolerance(1E-2);
-    minimizer[i]->SetFunction(fcn);
-    minimizer[i]->SetPrintLevel(0);
-  }
+    trackletFitter = new SQTrackletFitter(KMAG_ON);
 
   // Minimize ROOT output
   extern Int_t gErrorIgnoreLevel;
@@ -374,9 +373,12 @@ KalmanFastTracking::KalmanFastTracking(const PHField *field, const TGeoManager *
     slope_max[i] = costheta_plane[i] * TX_MAX + sintheta_plane[i] * TY_MAX;
     intersection_max[i] = costheta_plane[i] * X0_MAX + sintheta_plane[i] * Y0_MAX;
 
-#ifdef COARSE_MODE
+        if(COARSE_MODE)
+        {
     resol_plane[i] = 3. * p_geomSvc->getPlaneSpacing(i) / sqrt(12.);
-#else
+        }
+        else
+        {
     if (i <= 6)
     {
       resol_plane[i] = recoConsts::instance()->get_DoubleFlag("RejectWinDC0");
@@ -397,7 +399,7 @@ KalmanFastTracking::KalmanFastTracking(const PHField *field, const TGeoManager *
     {
       resol_plane[i] = recoConsts::instance()->get_DoubleFlag("RejectWinDC3m");
     }
-#endif
+        }
     spacing_plane[i] = p_geomSvc->getPlaneSpacing(i);
   }
 
@@ -430,10 +432,8 @@ KalmanFastTracking::KalmanFastTracking(const PHField *field, const TGeoManager *
 
 KalmanFastTracking::~KalmanFastTracking()
 {
-  if (enable_KF)
-    delete kmfitter;
-  delete minimizer[0];
-  delete minimizer[1];
+    if(enable_KF) delete kmfitter;
+    delete trackletFitter;
 }
 
 void KalmanFastTracking::setRawEventDebug(SRawEvent *event_input)
@@ -471,13 +471,31 @@ int KalmanFastTracking::setRawEventPrep(SRawEvent *event_input)
   {
     // std::cout << "For station " << i << std::endl;
     hitIDs_mask[i].clear();
-    if (MC_MODE || COSMIC_MODE || rawEvent->isFPGATriggered())
+        if(HIT_MASK_MODE == "XY")
+        {
+            hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_mask[i]);
+            if (verbosity >= 4) LogInfo("Mask XY");
+        }          
+        else if(HIT_MASK_MODE == "X" ||
+                HIT_MASK_MODE == "AUTO" && (MC_MODE || COSMIC_MODE || rawEvent->isFPGATriggered()))
     {
       hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskX[i]);
+            if (verbosity >= 4) LogInfo("Mask X");
+        }
+        else if(HIT_MASK_MODE == "NONE")
+        {
+            if (verbosity >= 4) LogInfo("Mask NONE");
     }
     else
     {
       hitIDs_mask[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_maskY[i]);
+            if (verbosity >= 4) LogInfo("Mask Y");
+        }
+        if (verbosity >= 4) {
+          std::ostringstream oss;
+          oss << "  ";
+          for (auto it = hitIDs_mask[i].begin(); it != hitIDs_mask[i].end(); it++) oss << " " << *it;
+          LogInfo(oss.str());
     }
 
     // for(std::list<int>::iterator iter = hitIDs_mask[i].begin(); iter != hitIDs_mask[i].end(); ++iter) std::cout << *iter << " " << hitAll[*iter].detectorID << " === ";
@@ -496,7 +514,7 @@ int KalmanFastTracking::setRawEventPrep(SRawEvent *event_input)
     hitIDs_muidHodoAid[i] = rawEvent->getHitsIndexInDetectors(detectorIDs_muidHodoAid[i]);
   }
 
-  if (!COARSE_MODE)
+    if(!COARSE_MODE && REQUIRE_MUID)
   {
     buildPropSegments();
     if (propSegs[0].empty() || propSegs[1].empty())
@@ -720,6 +738,8 @@ void KalmanFastTracking::buildBackPartialTracks()
           continue;
 
         // Project to proportional tubes to see if there is enough
+                if(REQUIRE_MUID)
+                {
         int nPropHits = 0;
         for (int i = 0; i < 4; ++i)
         {
@@ -738,6 +758,7 @@ void KalmanFastTracking::buildBackPartialTracks()
         if (nPropHits == 0)
           continue;
       }
+            }
 
       Tracklet tracklet_23 = (*tracklet2) + (*tracklet3);
       if (verbosity >= 3)
@@ -1460,10 +1481,8 @@ bool KalmanFastTracking::acceptTracklet(Tracklet &tracklet)
   // For back partials, require projection inside KMAG, and muon id in prop. tubes
   if (tracklet.stationID > nStations - 2)
   {
-    if (!COSMIC_MODE && !p_geomSvc->isInKMAG(tracklet.getExpPositionX(Z_KMAG_BEND), tracklet.getExpPositionY(Z_KMAG_BEND)))
-      return false;
-    if (!(muonID_comp(tracklet) || muonID_search(tracklet)))
-      return false;
+        if(!COSMIC_MODE && !p_geomSvc->isInKMAG(tracklet.getExpPositionX(Z_KMAG_BEND), tracklet.getExpPositionY(Z_KMAG_BEND))) return false;
+        if(REQUIRE_MUID && (!(muonID_comp(tracklet) || muonID_search(tracklet)))) return false;
   }
 
   // If everything is fine ...
@@ -1476,10 +1495,12 @@ bool KalmanFastTracking::acceptTracklet(Tracklet &tracklet)
 
 bool KalmanFastTracking::hodoMask(Tracklet &tracklet)
 {
-  // LogInfo(tracklet.stationID);
+    if (verbosity >= 3) LogInfo("hodoMask: " << tracklet.stationID);
+    if (HIT_MASK_MODE == "NONE") return true;
   int nHodoHits = 0;
   for (std::vector<int>::iterator stationID = stationIDs_mask[tracklet.stationID - 1].begin(); stationID != stationIDs_mask[tracklet.stationID - 1].end(); ++stationID)
   {
+        if (verbosity >= 3) LogInfo("stID=" << *stationID);
     bool masked = false;
     for (std::list<int>::iterator iter = hitIDs_mask[*stationID - 1].begin(); iter != hitIDs_mask[*stationID - 1].end(); ++iter)
     {
@@ -1793,54 +1814,7 @@ void KalmanFastTracking::buildPropSegments()
 
 int KalmanFastTracking::fitTracklet(Tracklet &tracklet)
 {
-  tracklet_curr = tracklet;
-
-  // idx = 0, using simplex; idx = 1 using migrad
-  int idx = 1;
-#ifdef _ENABLE_MULTI_MINI
-  if (tracklet.stationID < nStations - 1)
-    idx = 0;
-#endif
-
-  minimizer[idx]->SetLimitedVariable(0, "tx", tracklet.tx, 0.001, -TX_MAX, TX_MAX);
-  minimizer[idx]->SetLimitedVariable(1, "ty", tracklet.ty, 0.001, -TY_MAX, TY_MAX);
-  minimizer[idx]->SetLimitedVariable(2, "x0", tracklet.x0, 0.1, -X0_MAX, X0_MAX);
-  minimizer[idx]->SetLimitedVariable(3, "y0", tracklet.y0, 0.1, -Y0_MAX, Y0_MAX);
-  if (KMAG_ON)
-  {
-    minimizer[idx]->SetLimitedVariable(4, "invP", tracklet.invP, 0.001 * tracklet.invP, INVP_MIN, INVP_MAX);
-  }
-  minimizer[idx]->Minimize();
-
-  tracklet.tx = minimizer[idx]->X()[0];
-  tracklet.ty = minimizer[idx]->X()[1];
-  tracklet.x0 = minimizer[idx]->X()[2];
-  tracklet.y0 = minimizer[idx]->X()[3];
-
-  tracklet.err_tx = minimizer[idx]->Errors()[0];
-  tracklet.err_ty = minimizer[idx]->Errors()[1];
-  tracklet.err_x0 = minimizer[idx]->Errors()[2];
-  tracklet.err_y0 = minimizer[idx]->Errors()[3];
-
-  /// Avoid too-small error, which causes NaN in Tracklet::operator+().
-  if (tracklet.err_tx < 1e-6)
-    tracklet.err_tx = 1e-6;
-  if (tracklet.err_ty < 1e-6)
-    tracklet.err_ty = 1e-6;
-  if (tracklet.err_x0 < 1e-4)
-    tracklet.err_x0 = 1e-4;
-  if (tracklet.err_y0 < 1e-4)
-    tracklet.err_y0 = 1e-4;
-
-  if (KMAG_ON && tracklet.stationID == nStations)
-  {
-    tracklet.invP = minimizer[idx]->X()[4];
-    tracklet.err_invP = minimizer[idx]->Errors()[4];
-  }
-
-  tracklet.chisq = minimizer[idx]->MinValue();
-
-  int status = minimizer[idx]->Status();
+    int status = trackletFitter->fit(tracklet);
   return status;
 }
 
