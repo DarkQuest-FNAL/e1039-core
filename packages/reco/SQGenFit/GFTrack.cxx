@@ -439,6 +439,15 @@ SRecTrack GFTrack::getSRecTrack()
     strack.insertChisq((*iter)->getTrackPoint()->getKalmanFitterInfo()->getSmoothedChi2());
   }
 
+  // DarkQuest: keep the vertex swim and the upstream/target/dump/vertex chi2 hypothesis tests here
+  // (upstream moved them into SQVertexing).  The DarkQuest flow (SQReco -> VertexFit -> SimAna)
+  // relies on SRecTrack carrying its vertex-level momentum, position and chi2 right after SQReco.
+  strack.swimToVertex(nullptr, nullptr, false);
+  strack.setChisqUpstream(swimToVertex(Z_UPSTREAM));
+  strack.setChisqTarget(swimToVertex(Z_TARGET));
+  strack.setChisqDump(swimToVertex(Z_DUMP));
+  strack.setChisqVertex(swimToVertex(strack.getVertexPos().Z()));
+
   strack.setKalmanStatus(1);
   return strack;
 }
