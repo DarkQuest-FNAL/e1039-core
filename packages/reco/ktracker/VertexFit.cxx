@@ -59,6 +59,7 @@ namespace
   static double Z_DUMP;
   static double Z_UPSTREAM;
   static double Z_DOWNSTREAM;
+  static double FMAG_LENGTH;
 
   // initialize global variables
   void initGlobalVariables()
@@ -84,6 +85,7 @@ namespace
       Z_DUMP = rc->get_DoubleFlag("Z_DUMP");
       Z_UPSTREAM = rc->get_DoubleFlag("Z_UPSTREAM");
       Z_DOWNSTREAM = rc->get_DoubleFlag("Z_DOWNSTREAM");
+      FMAG_LENGTH = rc->get_DoubleFlag("FMAG_LENGTH");
     }
   }
 }
@@ -393,9 +395,30 @@ int VertexFit::setRecEvent(SRecEvent *recEvent, int sign1, int sign2)
         }
         if (posSt1.Z() < 490)
         {
-          addHypothesis(xintY, yintY, zintY, 10.0, 10.0, 10.0);
-          addHypothesis(xintX, yintX, zintX, 10.0, 10.0, 10.0);
+          // straight-line extrapolation of the station-1 state ignores the FMAG bend: inside the iron a prompt pair
+          // crosses the axis a second time (z ~ 400-450 cm), so keep such a hypothesis only if it passes the bend-sign test
+          const bool okY = passesBendSign(track_pos, track_neg, zintY);
+          const bool okX = passesBendSign(track_pos, track_neg, zintX);
+          if (okY) addHypothesis(xintY, yintY, zintY, 10.0, 10.0, 10.0);
+          if (okX) addHypothesis(xintX, yintX, zintX, 10.0, 10.0, 10.0);
+          if (!okY && !okX)
+          {
+            // both straight-line crossings are the second crossing inside the iron of a prompt pair: let the prompt
+            // hypotheses compete (in the same vertex-chi2 mode) with whatever else was seeded
+            addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
+            TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
+            addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
+          }
         }
+      }
+
+      // nothing survived the displaced branch: seed the prompt hypotheses instead, but keep fitting them in the
+      // displaced (vertex-chi2) mode, which converges for these pairs where the Kalman-chi2 mode does not
+      if (m_displaced && z_start.empty())
+      {
+        addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
+        TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
+        addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
       }
 
       if (!m_displaced)
@@ -512,6 +535,26 @@ TVector3 VertexFit::Interpolator(SRecTrack &track1, SRecTrack &track2, double zv
   double yint = (ty_1 * zval + track1.getPositionVecSt1().Y() - ty_1 * track1.getPositionVecSt1().Z() + ty_2 * zval + track2.getPositionVecSt1().Y() - ty_2 * track1.getPositionVecSt1().Z()) / 2.;
 
   return TVector3(xint, yint, zval);
+}
+
+bool VertexFit::passesBendSign(SRecTrack &track1, SRecTrack &track2, double zval)
+{
+  // Downstream of FMAG the straight-line extrapolation is valid and there is no bend to check
+  if (zval >= FMAG_LENGTH) return true;
+  if (zval < 0.) return false;
+
+  // Swim both tracks through FMAG (pT kick + energy loss, as in findDimuonVertexFast) and look at the step closest to zval
+  TVector3 pos1[NSTEPS_FMAG + NSTEPS_TARGET + 1], mom1[NSTEPS_FMAG + NSTEPS_TARGET + 1];
+  TVector3 pos2[NSTEPS_FMAG + NSTEPS_TARGET + 1], mom2[NSTEPS_FMAG + NSTEPS_TARGET + 1];
+  track1.swimToVertex(pos1, mom1);
+  track2.swimToVertex(pos2, mom2);
+  int iStep = int((FMAG_LENGTH - zval) / (FMAG_LENGTH / NSTEPS_FMAG) + 0.5);
+  if (iStep < 0) iStep = 0;
+  if (iStep > NSTEPS_FMAG) iStep = NSTEPS_FMAG;
+
+  // same test as SRecTrack::swimToVertex / findDimuonVertexFast: a track past its turning point has the wrong px sign,
+  // i.e. this is the "upstream accidental cross", not a vertex
+  return FMAGSTR * track1.getCharge() * mom1[iStep].Px() > 0 && FMAGSTR * track2.getCharge() * mom2[iStep].Px() > 0;
 }
 
 TVector3 VertexFit::findVertexDumpSt1(SRecTrack &track1, SRecTrack &track2)
