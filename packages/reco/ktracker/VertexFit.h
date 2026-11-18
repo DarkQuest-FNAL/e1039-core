@@ -107,6 +107,8 @@ public:
   double findSingleMuonVertex(TrkPar &_trkpar_start);
 
   TVector3 Interpolator(SRecTrack &track1, SRecTrack &track2, double zval);
+  /// Reject a vertex hypothesis inside FMAG when either track, swum to that z, has already passed its bend turning point
+  bool passesBendSign(SRecTrack &track1, SRecTrack &track2, double zval);
 
   /// Gets
   double getVertexZ0() { return _vtxpar_curr._r[2][0]; }
