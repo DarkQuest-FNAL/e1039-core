@@ -397,16 +397,36 @@ int VertexFit::setRecEvent(SRecEvent *recEvent, int sign1, int sign2)
         {
           // straight-line extrapolation of the station-1 state ignores the FMAG bend: inside the iron a prompt pair
           // crosses the axis a second time (z ~ 400-450 cm), so keep such a hypothesis only if it passes the bend-sign test
-          if (passesBendSign(track_pos, track_neg, zintY)) addHypothesis(xintY, yintY, zintY, 10.0, 10.0, 10.0);
-          if (passesBendSign(track_pos, track_neg, zintX)) addHypothesis(xintX, yintX, zintX, 10.0, 10.0, 10.0);
+          const bool okY = passesBendSign(track_pos, track_neg, zintY);
+          const bool okX = passesBendSign(track_pos, track_neg, zintX);
+          if (okY) addHypothesis(xintY, yintY, zintY, 10.0, 10.0, 10.0);
+          if (okX) addHypothesis(xintX, yintX, zintX, 10.0, 10.0, 10.0);
+          if (!okY && !okX)
+          {
+            // both straight-line crossings are the second crossing inside the iron of a prompt pair: let the prompt
+            // hypotheses compete (in the same vertex-chi2 mode) with whatever else was seeded
+            addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
+            TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
+            addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
+          }
         }
       }
 
-      // always seed the prompt hypotheses as well, so a displaced seed has to beat them on the same chi2 instead of
-      // winning by default; m_displaced still selects the vertex-chi2 convergence/selection mode in processOnePair
-      addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
-      TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
-      addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
+      // nothing survived the displaced branch: seed the prompt hypotheses instead, but keep fitting them in the
+      // displaced (vertex-chi2) mode, which converges for these pairs where the Kalman-chi2 mode does not
+      if (m_displaced && z_start.empty())
+      {
+        addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
+        TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
+        addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
+      }
+
+      if (!m_displaced)
+      {
+        addHypothesis(0.5 * (dimuon.vtx_pos[0] + dimuon.vtx_neg[0]), 0.5 * (dimuon.vtx_pos[1] + dimuon.vtx_neg[1]), 0.5 * (dimuon.vtx_pos[2] + dimuon.vtx_neg[2]), 10.0, 10.0, 50.);
+        TVector3 posCand = findDimuonVertexFast(track_pos, track_neg);
+        addHypothesis(posCand.X(), posCand.Y(), posCand.Z(), 10.0, 10.0, 50.);
+      }
       choice_eval = processOnePair();
 
       // Fill the dimuon info which are not related to track refitting first
@@ -528,7 +548,6 @@ bool VertexFit::passesBendSign(SRecTrack &track1, SRecTrack &track2, double zval
   TVector3 pos2[NSTEPS_FMAG + NSTEPS_TARGET + 1], mom2[NSTEPS_FMAG + NSTEPS_TARGET + 1];
   track1.swimToVertex(pos1, mom1);
   track2.swimToVertex(pos2, mom2);
-
   int iStep = int((FMAG_LENGTH - zval) / (FMAG_LENGTH / NSTEPS_FMAG) + 0.5);
   if (iStep < 0) iStep = 0;
   if (iStep > NSTEPS_FMAG) iStep = NSTEPS_FMAG;
